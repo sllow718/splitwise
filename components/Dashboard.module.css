@@ -1,0 +1,138 @@
+.container {
+    min-height: 100vh;
+}
+
+.header {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--glass-border);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.headerContent {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-4);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.logoIcon {
+    font-size: 1.5rem;
+}
+
+.logoText {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--color-primary-light), var(--color-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.userMenu {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+}
+
+.userInfo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+}
+
+.userName {
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-8) var(--spacing-4);
+}
+
+.welcomeSection {
+    margin-bottom: var(--spacing-8);
+}
+
+.welcomeTitle {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    margin-bottom: var(--spacing-2);
+}
+
+.welcomeSubtitle {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-lg);
+}
+
+.actionsBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-6);
+}
+
+.sectionTitle {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+}
+
+.groupsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--spacing-5);
+}
+
+.loadingState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-12);
+    color: var(--color-text-secondary);
+}
+
+.loadingState p {
+    margin-top: var(--spacing-4);
+}
+
+@media (max-width: 640px) {
+    .headerContent {
+        flex-direction: column;
+        gap: var(--spacing-4);
+    }
+
+    .userMenu {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .welcomeTitle {
+        font-size: var(--font-size-2xl);
+    }
+
+    .actionsBar {
+        flex-direction: column;
+        gap: var(--spacing-4);
+        align-items: stretch;
+    }
+}
