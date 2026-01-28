@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import type { KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { KeyboardEvent, ChangeEvent, FormEvent } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { ExpenseSplit, ExpenseWithSplits, Group, Expense, Profile } from '@/lib/types';
@@ -44,6 +44,21 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
     const [detailLoading, setDetailLoading] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState<ExpenseWithSplits | null>(null);
     const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
+    const [groupDetails, setGroupDetails] = useState<Group>(group);
+    const [groupEditMode, setGroupEditMode] = useState(false);
+    const [editName, setEditName] = useState(group.name);
+    const [editDescription, setEditDescription] = useState(group.description || '');
+    const [groupImagePreview, setGroupImagePreview] = useState<string | null>(
+        group.image_url || null
+    );
+    const [groupImageUrlInput, setGroupImageUrlInput] = useState(
+        group.image_url || ''
+    );
+    const [groupUpdateStatus, setGroupUpdateStatus] = useState<string | null>(null);
+    const [groupUpdateStatusType, setGroupUpdateStatusType] = useState<
+        'success' | 'error' | null
+    >(null);
+    const [groupSaving, setGroupSaving] = useState(false);
 
     const fetchMembers = useCallback(async () => {
         const { data } = await supabase
@@ -102,10 +117,17 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
         setLoading(false);
     }, [group.id]);
 
+    const loadedGroupRef = useRef<string | null>(null);
+
     useEffect(() => {
+        if (loadedGroupRef.current === group.id) {
+            return;
+        }
+
+        loadedGroupRef.current = group.id;
         fetchMembers();
         fetchExpenses();
-    }, [fetchMembers, fetchExpenses]);
+    }, [fetchMembers, fetchExpenses, group.id]);
 
     const handleExpenseAdded = (newExpense: Expense) => {
         fetchExpenses(); // Refresh to get full expense with payer info
@@ -235,29 +257,238 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
 
     const isCreator = group.created_by === currentUser.id;
 
+    useEffect(() => {
+        setGroupDetails(group);
+        setEditName(group.name);
+        setEditDescription(group.description || '');
+        setGroupImagePreview(group.image_url || null);
+        setGroupImageUrlInput(group.image_url || '');
+    }, [group]);
+
+    const handleGroupImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            setGroupImagePreview(reader.result as string);
+            setGroupImageUrlInput('');
+            setGroupUpdateStatus(null);
+            setGroupUpdateStatusType(null);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleGroupUpdate = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setGroupSaving(true);
+        setGroupUpdateStatus(null);
+        setGroupUpdateStatusType(null);
+
+        const finalImage = groupImagePreview || groupImageUrlInput.trim() || null;
+        const payload = {
+            name: editName.trim(),
+            description: editDescription.trim() || null,
+            image_url: finalImage,
+        };
+
+        const { data, error } = await supabase
+            .from('groups')
+            .update(payload)
+            .eq('id', group.id)
+            .select('*')
+            .single();
+
+        if (error) {
+            setGroupUpdateStatusType('error');
+            setGroupUpdateStatus(error.message);
+            setGroupSaving(false);
+            return;
+        }
+
+        if (data) {
+            setGroupDetails(data);
+            setEditName(data.name);
+            setEditDescription(data.description || '');
+            setGroupImagePreview(data.image_url || null);
+            setGroupImageUrlInput(data.image_url || '');
+            setGroupUpdateStatusType('success');
+            setGroupUpdateStatus('Group details updated.');
+            setGroupEditMode(false);
+        }
+
+        setGroupSaving(false);
+    };
+
+    const displayImage = groupImagePreview || groupDetails.image_url;
+
     return (
         <div className={styles.container}>
             <header className={styles.header}>
-                <button onClick={onBack} className={`btn btn-ghost ${styles.backBtn}`}>
-                    <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
+                <div className={styles.headerMeta}>
+                    <button
+                        onClick={onBack}
+                        className={`btn btn-ghost ${styles.backBtn}`}
                     >
-                        <polyline points="15,18 9,12 15,6" />
-                    </svg>
-                    Back
-                </button>
-                <h1 className={styles.title}>{group.name}</h1>
-                <button
-                    onClick={() => setShowAddExpense(true)}
-                    className="btn btn-primary"
-                >
-                    + Add Expense
-                </button>
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                        >
+                            <polyline points="15,18 9,12 15,6" />
+                        </svg>
+                        Back
+                    </button>
+                    <div className={styles.groupHero}>
+                        <div className={styles.groupAvatarWrapper}>
+                            {displayImage ? (
+                                <img
+                                    src={displayImage}
+                                    alt={`${groupDetails.name} avatar`}
+                                    className={styles.groupAvatarImage}
+                                />
+                            ) : (
+                                <div className={styles.groupAvatarPlaceholder}>
+                                    {groupDetails.name
+                                        .split(' ')
+                                        .map((segment) => segment[0])
+                                        .join('')
+                                        .toUpperCase()
+                                        .slice(0, 2)}
+                                </div>
+                            )}
+                        </div>
+                        <div className={styles.groupHeroText}>
+                            <h1 className={styles.title}>{groupDetails.name}</h1>
+                            {groupDetails.description && (
+                                <p className={styles.groupDescription}>
+                                    {groupDetails.description}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className={styles.headerActions}>
+                        {isCreator && (
+                            <button
+                                onClick={() =>
+                                    setGroupEditMode((mode) => !mode)
+                                }
+                                className="btn btn-ghost"
+                            >
+                                {groupEditMode ? 'Cancel edit' : 'Edit group'}
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setShowAddExpense(true)}
+                            className="btn btn-primary"
+                        >
+                            + Add Expense
+                        </button>
+                    </div>
+                </div>
+                {groupEditMode && isCreator && (
+                    <form
+                        className={styles.groupEditForm}
+                        onSubmit={handleGroupUpdate}
+                    >
+                        <div className={styles.groupEditFields}>
+                            <label className="form-label" htmlFor="group-name">
+                                Group name
+                            </label>
+                            <input
+                                id="group-name"
+                                className="form-input"
+                                value={editName}
+                                onChange={(event) =>
+                                    setEditName(event.target.value)
+                                }
+                                required
+                            />
+                        </div>
+                        <div className={styles.groupEditFields}>
+                            <label
+                                className="form-label"
+                                htmlFor="group-description"
+                            >
+                                Description
+                            </label>
+                            <textarea
+                                id="group-description"
+                                className="form-textarea"
+                                rows={2}
+                                value={editDescription}
+                                onChange={(event) =>
+                                    setEditDescription(event.target.value)
+                                }
+                                placeholder="Optional description"
+                            />
+                        </div>
+                        <div className={styles.groupImageInputs}>
+                            <label className="form-label">
+                                Group profile image
+                            </label>
+                            <div className={styles.groupImageControls}>
+                                <label className="file-upload">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleGroupImageFileChange}
+                                    />
+                                    <span className="file-upload-icon">
+                                        📷
+                                    </span>
+                                    <span className="file-upload-text">
+                                        Upload image
+                                    </span>
+                                </label>
+                                <input
+                                    className="form-input"
+                                    type="url"
+                                    placeholder="Or paste image URL"
+                                    value={groupImageUrlInput}
+                                    onChange={(event) => {
+                                        setGroupImageUrlInput(event.target.value);
+                                        setGroupImagePreview(null);
+                                        setGroupUpdateStatus(null);
+                                        setGroupUpdateStatusType(null);
+                                    }}
+                                />
+                            </div>
+                            {displayImage && (
+                                <div className={styles.groupImagePreview}>
+                                    <img
+                                        src={displayImage}
+                                        alt="Preview"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className={styles.groupEditActions}>
+                            <button
+                                type="submit"
+                                className="btn btn-primary"
+                                disabled={groupSaving}
+                            >
+                                {groupSaving ? 'Saving…' : 'Save changes'}
+                            </button>
+                            {groupUpdateStatus && (
+                                <p
+                                    className={`${styles.groupStatus} ${
+                                        groupUpdateStatusType === 'error'
+                                            ? styles.statusError
+                                            : styles.statusSuccess
+                                    }`}
+                                >
+                                    {groupUpdateStatus}
+                                </p>
+                            )}
+                        </div>
+                    </form>
+                )}
             </header>
 
             <div className={styles.content}>
