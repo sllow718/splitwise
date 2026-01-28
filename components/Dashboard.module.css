@@ -66,7 +66,7 @@
 .main {
     max-width: 1200px;
     margin: 0 auto;
-    padding: var(--spacing-8) var(--spacing-4);
+    padding: var(--spacing-8) var(--spacing-4) calc(var(--spacing-10) + 4rem);
 }
 
 .welcomeSection {
@@ -102,6 +102,152 @@
     gap: var(--spacing-5);
 }
 
+.activityContainer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-5);
+}
+
+.activityHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.activitySubtitle {
+    margin-top: var(--spacing-1);
+    color: var(--color-text-secondary);
+}
+
+.activityList {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    padding: 0;
+}
+
+.activityItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-4);
+    padding: var(--spacing-4);
+    background: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+}
+
+.activityDetails {
+    flex: 1;
+}
+
+.activityDescription {
+    margin-bottom: var(--spacing-1);
+    font-weight: 600;
+}
+
+.activityDescription span {
+    font-style: italic;
+    color: var(--color-text-secondary);
+}
+
+.activityTime {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.activityMeta {
+    text-align: right;
+}
+
+.activityAmount {
+    font-weight: 700;
+    font-size: var(--font-size-lg);
+}
+
+.accountSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-5);
+}
+
+.accountHeader {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+}
+
+.accountCard {
+    display: grid;
+    gap: var(--spacing-4);
+    background: var(--color-bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-6);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--glass-shadow);
+}
+
+.accountAvatarWrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.accountAvatarImage {
+    width: 110px;
+    height: 110px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+    border: 2px solid var(--color-primary);
+}
+
+.accountAvatarPlaceholder {
+    width: 110px;
+    height: 110px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: var(--font-size-xl);
+    color: white;
+}
+
+.accountAvatarLabel {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.accountMeta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+}
+
+.accountForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.accountUrlInput {
+    width: 100%;
+}
+
+.accountStatus {
+    margin-top: var(--spacing-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-success);
+}
+
+.accountStatusError {
+    color: var(--color-danger);
+}
+
 .loadingState {
     display: flex;
     flex-direction: column;
@@ -113,6 +259,55 @@
 
 .loadingState p {
     margin-top: var(--spacing-4);
+}
+
+.bottomNav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3) var(--spacing-4);
+    background: rgba(15, 23, 42, 0.9);
+    border-top: 1px solid var(--glass-border);
+    box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(18px);
+    z-index: 40;
+}
+
+.navItem {
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-2);
+    border-radius: var(--radius-lg);
+    font-weight: 500;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.navItem:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+}
+
+.navItemActive {
+    background: rgba(99, 102, 241, 0.15);
+    color: white;
+}
+
+.navIcon {
+    font-size: 1.25rem;
+}
+
+.navLabel {
+    font-size: var(--font-size-sm);
 }
 
 @media (max-width: 640px) {
@@ -134,5 +329,19 @@
         flex-direction: column;
         gap: var(--spacing-4);
         align-items: stretch;
+    }
+}
+
+@media (min-width: 769px) {
+    .bottomNav {
+        justify-content: center;
+        max-width: 768px;
+        margin: 0 auto;
+        border-radius: var(--radius-full);
+        bottom: 1rem;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: calc(100% - 2rem);
     }
 }
