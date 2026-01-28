@@ -1,0 +1,142 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.detailHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+}
+
+.categoryIcon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    color: #fff;
+}
+
+.detailTitle {
+    flex: 1;
+}
+
+.description {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+}
+
+.meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-top: var(--spacing-1);
+}
+
+.amountRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-4);
+}
+
+.amountValue {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+}
+
+.attachmentRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-3);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-light);
+    gap: var(--spacing-2);
+}
+
+.attachmentLabel {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.attachmentLink {
+    color: var(--color-secondary);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.attachmentLink:hover {
+    text-decoration: underline;
+}
+
+.splitSection {
+    padding: var(--spacing-4);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-light);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.splitHeader {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.loadingWrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    color: var(--color-text-secondary);
+}
+
+.emptyText {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.splitList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.splitItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-3);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    gap: var(--spacing-3);
+}
+
+.splitName {
+    font-weight: 500;
+}
+
+.splitMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.splitAmount {
+    font-weight: 600;
+}
+
+.splitStatus {
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.4px;
+    padding: 0 var(--spacing-2);
+}

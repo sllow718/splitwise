@@ -66,7 +66,8 @@ ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
 -- Policies for groups (users can see groups they're members of)
 CREATE POLICY "Users can view groups they belong to" ON groups
   FOR SELECT USING (
-    EXISTS (
+    created_by = auth.uid()
+    OR EXISTS (
       SELECT 1 FROM group_members
       WHERE group_members.group_id = groups.id
       AND group_members.profile_id = auth.uid()
@@ -98,7 +99,8 @@ ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 -- Policies for group_members
 CREATE POLICY "Users can view members of their groups" ON group_members
   FOR SELECT USING (
-    EXISTS (
+    profile_id = auth.uid()
+    OR EXISTS (
       SELECT 1 FROM group_members gm
       WHERE gm.group_id = group_members.group_id
       AND gm.profile_id = auth.uid()

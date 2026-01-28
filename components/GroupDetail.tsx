@@ -1,11 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Group, Expense, Profile } from '@/lib/types';
+import type { ExpenseSplit, ExpenseWithSplits, Group, Expense, Profile } from '@/lib/types';
 import { formatCurrency, calculateGroupBalances } from '@/lib/utils';
+import { getCategoryIcon, getCategoryColor } from '@/lib/expenseCategory';
+import ExpenseDetailModal from './ExpenseDetailModal';
+import ExpenseModal from './ExpenseModal';
 import AddExpenseModal from './AddExpenseModal';
+import AddMemberModal from './AddMemberModal';
 import styles from './GroupDetail.module.css';
 
 interface GroupDetailProps {
@@ -15,15 +20,30 @@ interface GroupDetailProps {
 }
 
 interface ExpenseWithPayer extends Expense {
-    payer?: Profile;
+    payer?: Profile | null;
+}
+
+interface ExpenseSplitWithUser extends ExpenseSplit {
+    user?: Profile | null;
+}
+
+interface ExpenseDetailData {
+    expense: ExpenseWithPayer;
+    splits: ExpenseSplitWithUser[];
 }
 
 export default function GroupDetail({ group, currentUser, onBack }: GroupDetailProps) {
     const [expenses, setExpenses] = useState<ExpenseWithPayer[]>([]);
     const [members, setMembers] = useState<Profile[]>([]);
     const [showAddExpense, setShowAddExpense] = useState(false);
+    const [showAddMember, setShowAddMember] = useState(false);
     const [loading, setLoading] = useState(true);
     const [balances, setBalances] = useState<Map<string, number>>(new Map());
+    const [expenseDetailData, setExpenseDetailData] = useState<ExpenseDetailData | null>(null);
+    const [isExpenseDetailOpen, setIsExpenseDetailOpen] = useState(false);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [expenseToEdit, setExpenseToEdit] = useState<ExpenseWithSplits | null>(null);
+    const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
 
     const fetchMembers = useCallback(async () => {
         const { data } = await supabase
@@ -92,28 +112,106 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
         setShowAddExpense(false);
     };
 
-    const getCategoryIcon = (category: string) => {
-        const icons: Record<string, string> = {
-            food: '🍽️',
-            transport: '🚗',
-            rent: '🏠',
-            utilities: '💡',
-            entertainment: '🎬',
-            other: '📦',
-        };
-        return icons[category] || '📦';
+    const handleMemberAdded = (newMember: Profile) => {
+        setMembers(prev => [...prev, newMember]);
+        // Don't close modal automatically to allow adding multiple
     };
 
-    const getCategoryColor = (category: string) => {
-        const colors: Record<string, string> = {
-            food: '#f59e0b',
-            transport: '#3b82f6',
-            rent: '#10b981',
-            utilities: '#8b5cf6',
-            entertainment: '#ec4899',
-            other: '#6b7280',
-        };
-        return colors[category] || '#6b7280';
+    const openExpenseDetail = async (expense: ExpenseWithPayer) => {
+        setDeletingExpenseId(null);
+        setExpenseDetailData({ expense, splits: [] });
+        setIsExpenseDetailOpen(true);
+        setDetailLoading(true);
+
+        try {
+            const { data: splitRows, error } = await supabase
+                .from('expense_splits')
+                .select(`
+            *,
+            user:profiles!user_id (*)
+          `)
+                .eq('expense_id', expense.id);
+
+            if (error) {
+                throw error;
+            }
+
+            const mappedSplits: ExpenseDetailData['splits'] = (splitRows || []).map((split) => ({
+                ...split,
+                user: Array.isArray(split.user) ? split.user[0] : split.user,
+            }));
+
+            setExpenseDetailData({ expense, splits: mappedSplits });
+        } catch (err) {
+            console.error('Failed to load expense detail', err);
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const handleExpenseKeyDown = (event: KeyboardEvent<HTMLDivElement>, expense: ExpenseWithPayer) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            void openExpenseDetail(expense);
+        }
+    };
+
+    const closeExpenseDetail = () => {
+        setIsExpenseDetailOpen(false);
+        setExpenseDetailData(null);
+        setDetailLoading(false);
+        setDeletingExpenseId(null);
+    };
+
+    const handleExpenseEditStart = () => {
+        if (!expenseDetailData) return;
+
+        setExpenseToEdit({
+            ...expenseDetailData.expense,
+            splits: expenseDetailData.splits.map((split) => ({
+                user_id: split.user_id,
+                amount: split.amount,
+            })),
+        });
+        closeExpenseDetail();
+    };
+
+    const handleExpenseEditSuccess = () => {
+        setExpenseToEdit(null);
+        fetchExpenses();
+    };
+
+    const handleExpenseDelete = async () => {
+        if (!expenseDetailData) return;
+        if (!confirm('Are you sure you want to delete this expense?')) return;
+
+        setDeletingExpenseId(expenseDetailData.expense.id);
+        try {
+            const { error: deleteSplitsError } = await supabase
+                .from('expense_splits')
+                .delete()
+                .eq('expense_id', expenseDetailData.expense.id);
+
+            if (deleteSplitsError) {
+                throw deleteSplitsError;
+            }
+
+            const { error: deleteExpenseError } = await supabase
+                .from('expenses')
+                .delete()
+                .eq('id', expenseDetailData.expense.id);
+
+            if (deleteExpenseError) {
+                throw deleteExpenseError;
+            }
+
+            closeExpenseDetail();
+            fetchExpenses();
+        } catch (err) {
+            console.error('Failed to delete expense', err);
+        } finally {
+            setDeletingExpenseId(null);
+        }
     };
 
     const getInitials = (name: string) => {
@@ -134,6 +232,8 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
         if (balance < 0) return 'balance-negative';
         return 'balance-neutral';
     };
+
+    const isCreator = group.created_by === currentUser.id;
 
     return (
         <div className={styles.container}>
@@ -163,7 +263,19 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
             <div className={styles.content}>
                 <aside className={styles.sidebar}>
                     <div className={`glass-card ${styles.balanceCard}`}>
-                        <h3 className={styles.sidebarTitle}>Balances</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 className={styles.sidebarTitle} style={{ marginBottom: 0 }}>Balances</h3>
+                            {isCreator && (
+                                <button
+                                    onClick={() => setShowAddMember(true)}
+                                    className="btn btn-ghost btn-xs"
+                                    title="Add Member"
+                                >
+                                    + Add
+                                </button>
+                            )}
+                        </div>
+
                         {members.length === 0 ? (
                             <p className={styles.emptyText}>No members yet</p>
                         ) : (
@@ -228,7 +340,14 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                     ) : (
                         <div className="expense-list">
                             {expenses.map((expense) => (
-                                <div key={expense.id} className="expense-item">
+                                <div
+                                    key={expense.id}
+                                    className="expense-item"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => void openExpenseDetail(expense)}
+                                    onKeyDown={(event) => handleExpenseKeyDown(event, expense)}
+                                >
                                     <div
                                         className="expense-icon"
                                         style={{ background: getCategoryColor(expense.category) }}
@@ -245,7 +364,7 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                                             )}
                                         </div>
                                         <div className="expense-meta">
-                                            Paid by {expense.payer?.full_name || 'Unknown'} •{' '}
+                                            Added by {expense.payer?.full_name || 'Unknown'} •{' '}
                                             {new Date(expense.created_at).toLocaleDateString('en-US', {
                                                 month: 'short',
                                                 day: 'numeric',
@@ -274,6 +393,39 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                     currentUserId={currentUser.id}
                     onClose={() => setShowAddExpense(false)}
                     onAdded={handleExpenseAdded}
+                />
+            )}
+
+            {showAddMember && (
+                <AddMemberModal
+                    groupId={group.id}
+                    existingMemberIds={members.map(m => m.id)}
+                    onClose={() => setShowAddMember(false)}
+                    onAdded={handleMemberAdded}
+                />
+            )}
+
+            {expenseToEdit && (
+                <ExpenseModal
+                    groupId={group.id}
+                    members={members}
+                    currentUserId={currentUser.id}
+                    expenseToEdit={expenseToEdit}
+                    onClose={() => setExpenseToEdit(null)}
+                    onSuccess={handleExpenseEditSuccess}
+                />
+            )}
+
+            {isExpenseDetailOpen && expenseDetailData && (
+                <ExpenseDetailModal
+                    expense={expenseDetailData.expense}
+                    splits={expenseDetailData.splits}
+                    currentUserId={currentUser.id}
+                    onClose={closeExpenseDetail}
+                    onEdit={handleExpenseEditStart}
+                    onDelete={handleExpenseDelete}
+                    loading={detailLoading}
+                    isDeleting={deletingExpenseId === expenseDetailData.expense.id}
                 />
             )}
         </div>

@@ -58,7 +58,7 @@ export default function CreateGroupModal({
 
             onCreated(group);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to create group');
+            setError(err instanceof Error ? err.message : (err as any)?.message || 'Failed to create group');
         } finally {
             setLoading(false);
         }

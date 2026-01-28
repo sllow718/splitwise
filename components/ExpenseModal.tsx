@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Profile, Expense, ExpenseCategory, SplitType } from '@/lib/types';
+import type { Profile, Expense, ExpenseCategory, SplitType, ExpenseWithSplits } from '@/lib/types';
 import { calculateSplits } from '@/lib/utils';
 import styles from './Modal.module.css';
 
-interface AddExpenseModalProps {
+interface ExpenseModalProps {
     groupId: string;
     members: Profile[];
     currentUserId: string;
     onClose: () => void;
-    onAdded: (expense: Expense) => void;
+    onSuccess: () => void;
+    expenseToEdit?: ExpenseWithSplits;
 }
 
 const CATEGORIES: { value: ExpenseCategory; label: string; icon: string }[] = [
@@ -19,17 +20,18 @@ const CATEGORIES: { value: ExpenseCategory; label: string; icon: string }[] = [
     { value: 'transport', label: 'Transport', icon: '🚗' },
     { value: 'rent', label: 'Rent', icon: '🏠' },
     { value: 'utilities', label: 'Utilities', icon: '💡' },
-    { value: 'entertainment', label: 'Entertainment', icon: '🎊' },
+    { value: 'entertainment', label: 'Entertainment', icon: '🎬' },
     { value: 'other', label: 'Other', icon: '📦' },
 ];
 
-export default function AddExpenseModal({
+export default function ExpenseModal({
     groupId,
     members,
     currentUserId,
     onClose,
-    onAdded,
-}: AddExpenseModalProps) {
+    onSuccess,
+    expenseToEdit,
+}: ExpenseModalProps) {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState<ExpenseCategory>('other');
@@ -44,21 +46,56 @@ export default function AddExpenseModal({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const isEditing = !!expenseToEdit;
+
     useEffect(() => {
-        if (members.length > 0) {
-            setSelectedMembers(members.map((m) => m.id));
+        if (expenseToEdit) {
+            setDescription(expenseToEdit.description);
+            setAmount(expenseToEdit.amount.toString());
+            setCategory(expenseToEdit.category);
+            setPayerId(expenseToEdit.payer_id);
+            if (expenseToEdit.attachment_url) {
+                setAttachmentPreview(expenseToEdit.attachment_url);
+            }
+
+            // Reverse engineer split type and selection from splits
+            const splitMembers = expenseToEdit.splits.map(s => s.user_id);
+            setSelectedMembers(splitMembers);
+
+            // Determine split type (simple heuristic)
+            // Ideally we should store split_type in DB, but for now we infer
+            // If all amounts are equal (within variance), it's 'equal'.
+            // Otherwise 'exact' (we don't persist percentage, so retrieval is hard to map back to percentage exactly properly without storage)
+            // For MVP: Default to 'exact' if editing, or try to detect equal.
+
+            const totalAmount = expenseToEdit.amount;
+            const amounts = expenseToEdit.splits.map(s => s.amount);
+            const isAllEqual = amounts.every(a => Math.abs(a - amounts[0]) < 0.05); // tolerance
+
+            if (isAllEqual && Math.abs((amounts[0] * amounts.length) - totalAmount) < 0.05) {
+                setSplitType('equal');
+            } else {
+                setSplitType('exact');
+                const splitMap: Record<string, string> = {};
+                expenseToEdit.splits.forEach(s => {
+                    splitMap[s.user_id] = s.amount.toString();
+                });
+                setCustomSplits(splitMap);
+            }
         }
-    }, [members]);
+    }, [expenseToEdit]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // Validate file type
             const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
             if (!validTypes.includes(file.type)) {
                 setError('Please upload an image (JPEG, PNG, WebP) or PDF file');
                 return;
             }
 
+            // Validate file size (max 5MB)
             if (file.size > 5 * 1024 * 1024) {
                 setError('File size must be less than 5MB');
                 return;
@@ -67,6 +104,7 @@ export default function AddExpenseModal({
             setAttachment(file);
             setError(null);
 
+            // Create preview for images
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onloadend = () => {
@@ -107,8 +145,9 @@ export default function AddExpenseModal({
         setError(null);
 
         try {
-            let attachmentUrl: string | null = null;
+            let attachmentUrl: string | null = expenseToEdit?.attachment_url || null;
 
+            // Upload attachment if present
             if (attachment) {
                 const fileExt = attachment.name.split('.').pop();
                 const fileName = `${groupId}/${Date.now()}.${fileExt}`;
@@ -119,64 +158,99 @@ export default function AddExpenseModal({
 
                 if (uploadError) {
                     console.error('Upload error:', uploadError);
+                    // Continue without attachment if upload fails
                 } else {
                     const { data: urlData } = supabase.storage
                         .from('expense-attachments')
                         .getPublicUrl(fileName);
                     attachmentUrl = urlData.publicUrl;
                 }
+            } else if (attachmentPreview === null) {
+                // User removed existing attachment
+                attachmentUrl = null;
             }
 
-            const { data: expense, error: expenseError } = await supabase
-                .from('expenses')
-                .insert({
-                    group_id: groupId,
-                    payer_id: payerId,
-                    description: description.trim(),
-                    amount: numAmount,
-                    currency: 'USD',
-                    category,
-                    attachment_url: attachmentUrl,
-                })
-                .select()
-                .single();
+            let expenseId = expenseToEdit?.id;
 
-            if (expenseError || !expense) {
-                throw expenseError || new Error('Failed to add expense');
+            if (isEditing && expenseId) {
+                // UPDATE
+                const { error: updateError } = await supabase
+                    .from('expenses')
+                    .update({
+                        payer_id: payerId,
+                        description: description.trim(),
+                        amount: numAmount,
+                        category,
+                        attachment_url: attachmentUrl,
+                    })
+                    .eq('id', expenseId);
+
+                if (updateError) throw updateError;
+
+                // For splits, we delete all and recreate
+                const { error: deleteSplitsError } = await supabase
+                    .from('expense_splits')
+                    .delete()
+                    .eq('expense_id', expenseId);
+
+                if (deleteSplitsError) throw deleteSplitsError;
+
+            } else {
+                // CREATE
+                const { data: expense, error: expenseError } = await supabase
+                    .from('expenses')
+                    .insert({
+                        group_id: groupId,
+                        payer_id: payerId,
+                        description: description.trim(),
+                        amount: numAmount,
+                        currency: 'USD',
+                        category,
+                        attachment_url: attachmentUrl,
+                    })
+                    .select()
+                    .single();
+
+                if (expenseError) throw expenseError;
+                expenseId = expense.id;
             }
 
-            const splits = calculateSplits(
-                numAmount,
-                selectedMembers,
-                splitType,
-                selectedMembers.map((userId) => {
-                    const value = customSplits[userId] || '';
-                    if (splitType === 'percentage') {
-                        return { user_id: userId, percentage: parseFloat(value) || 0 };
-                    }
-                    return { user_id: userId, amount: parseFloat(value) || 0 };
-                })
-            );
+            if (!expenseId) throw new Error('No expense ID found');
+
+            // Calculate and create splits
+            let splits;
+            if (splitType === 'equal') {
+                splits = calculateSplits(numAmount, selectedMembers, 'equal');
+            } else if (splitType === 'percentage') {
+                const percentageSplits = selectedMembers.map((userId) => ({
+                    user_id: userId,
+                    percentage: parseFloat(customSplits[userId] || '0'),
+                }));
+                splits = calculateSplits(numAmount, selectedMembers, 'percentage', percentageSplits);
+            } else {
+                const exactSplits = selectedMembers.map((userId) => ({
+                    user_id: userId,
+                    amount: parseFloat(customSplits[userId] || '0'),
+                }));
+                splits = calculateSplits(numAmount, selectedMembers, 'exact', exactSplits);
+            }
 
             const { error: splitsError } = await supabase
                 .from('expense_splits')
                 .insert(
                     splits.map((split) => ({
-                        expense_id: expense.id,
+                        expense_id: expenseId,
                         user_id: split.user_id,
                         amount: split.amount,
                         status: 'unpaid',
                     }))
                 );
 
-            if (splitsError) {
-                throw splitsError;
-            }
+            if (splitsError) throw splitsError;
 
-            onAdded(expense);
+            onSuccess();
         } catch (err) {
-            console.error('Add expense error', err);
-            setError(err instanceof Error ? err.message : 'Failed to add expense');
+            setError(err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'add'} expense`);
         } finally {
             setLoading(false);
         }
@@ -184,21 +258,23 @@ export default function AddExpenseModal({
 
     const toggleMember = (memberId: string) => {
         setSelectedMembers((prev) =>
-            prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
+            prev.includes(memberId)
+                ? prev.filter((id) => id !== memberId)
+                : [...prev, memberId]
         );
     };
 
     const formatFileSize = (bytes: number) => {
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
                 <div className="modal-header">
-                    <h2 className="modal-title">Add Expense</h2>
+                    <h2 className="modal-title">{isEditing ? 'Edit Expense' : 'Add Expense'}</h2>
                     <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label="Close">
                         ✕
                     </button>
@@ -223,13 +299,7 @@ export default function AddExpenseModal({
                             />
                         </div>
 
-                        <div
-                            style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 1fr',
-                                gap: 'var(--spacing-4)',
-                            }}
-                        >
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-4)' }}>
                             <div className="form-group">
                                 <label htmlFor="amount" className="form-label">
                                     Amount *
@@ -278,7 +348,7 @@ export default function AddExpenseModal({
                                 {members.map((member) => (
                                     <option key={member.id} value={member.id}>
                                         {member.full_name}
-                                        {member.id === currentUserId ? ' (You)' : ''}
+                                        {member.id === currentUserId && ' (You)'}
                                     </option>
                                 ))}
                             </select>
@@ -291,9 +361,7 @@ export default function AddExpenseModal({
                                     <button
                                         key={type}
                                         type="button"
-                                        className={`${styles.splitOption} ${
-                                            splitType === type ? styles.splitOptionActive : ''
-                                        }`}
+                                        className={`${styles.splitOption} ${splitType === type ? styles.splitOptionActive : ''}`}
                                         onClick={() => setSplitType(type)}
                                     >
                                         {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -316,7 +384,7 @@ export default function AddExpenseModal({
                                             />
                                             <label htmlFor={`member-${member.id}`} className={styles.memberName}>
                                                 {member.full_name}
-                                                {member.id === currentUserId ? ' (You)' : ''}
+                                                {member.id === currentUserId && ' (You)'}
                                             </label>
                                         </div>
                                         {splitType !== 'equal' && selectedMembers.includes(member.id) && (
@@ -349,7 +417,9 @@ export default function AddExpenseModal({
                                     onChange={handleFileChange}
                                 />
                                 <div className="file-upload-icon">📎</div>
-                                <div className="file-upload-text">Click or drag to upload a receipt</div>
+                                <div className="file-upload-text">
+                                    Click or drag to upload a receipt
+                                </div>
                             </div>
 
                             {attachment && (
@@ -361,15 +431,7 @@ export default function AddExpenseModal({
                                             className={styles.filePreviewImage}
                                         />
                                     ) : (
-                                        <div
-                                            className={styles.filePreviewImage}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                background: 'var(--color-bg-card)',
-                                            }}
-                                        >
+                                        <div className={styles.filePreviewImage} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-card)' }}>
                                             📄
                                         </div>
                                     )}
@@ -403,16 +465,16 @@ export default function AddExpenseModal({
                         </button>
                         <button
                             type="submit"
-                            className="btn btn-primary"
+                            className="btn btn-success"
                             disabled={loading || !description.trim() || !amount}
                         >
                             {loading ? (
                                 <>
                                     <div className="spinner" style={{ width: 16, height: 16 }}></div>
-                                    Adding...
+                                    {isEditing ? 'Saving...' : 'Adding...'}
                                 </>
                             ) : (
-                                'Add Expense'
+                                isEditing ? 'Save Changes' : 'Add Expense'
                             )}
                         </button>
                     </div>

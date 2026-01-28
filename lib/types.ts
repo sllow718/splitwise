@@ -41,6 +41,15 @@ export interface ExpenseSplit {
     status: 'unpaid' | 'paid';
 }
 
+export interface ExpenseSplitSummary {
+    user_id: string;
+    amount: number;
+}
+
+export interface ExpenseWithSplits extends Expense {
+    splits: ExpenseSplitSummary[];
+}
+
 export type ExpenseCategory =
     | 'food'
     | 'transport'
