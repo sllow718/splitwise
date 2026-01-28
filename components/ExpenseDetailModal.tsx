@@ -47,6 +47,11 @@ export default function ExpenseDetailModal({
         return (user?.full_name || 'Unknown') + (split.user_id === currentUserId ? ' (You)' : '');
     };
 
+    const getPayerName = () => {
+        const payer = Array.isArray(expense.payer) ? expense.payer[0] : expense.payer;
+        return payer?.full_name || 'Unknown';
+    };
+
     const formattedAmount = formatCurrency(expense.amount, expense.currency);
 
     return (
@@ -76,7 +81,7 @@ export default function ExpenseDetailModal({
                             <div className={styles.detailTitle}>
                                 <p className={styles.description}>{expense.description}</p>
                                 <p className={styles.meta}>
-                                    Paid by {expense.payer?.full_name || 'Unknown'} • {createdAt}
+                                    Paid by {getPayerName()} • {createdAt}
                                 </p>
                             </div>
                         </div>
