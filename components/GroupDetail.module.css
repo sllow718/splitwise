@@ -207,6 +207,21 @@
     font-weight: 500;
 }
 
+.balanceText {
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+}
+
+.balanceOwes {
+    font-weight: 700;
+    color: var(--color-danger);
+}
+
+.balanceOwed {
+    font-weight: 700;
+    color: var(--color-success);
+}
+
 .main {
     min-height: 400px;
 }

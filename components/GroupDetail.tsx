@@ -563,6 +563,17 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                                 <ul className={styles.balanceList}>
                                     {members.map((member) => {
                                         const balance = getUserBalance(member.id);
+                                        const displayName = member.id === currentUser.id ? 'You' : member.full_name;
+                                        
+                                        let balanceText = '';
+                                        if (balance < 0) {
+                                            balanceText = `${displayName} currently owes `;
+                                        } else if (balance > 0) {
+                                            balanceText = `${displayName} is currently owed `;
+                                        } else {
+                                            balanceText = `${displayName} is settled up`;
+                                        }
+                                        
                                         return (
                                             <li key={member.id} className={styles.balanceItem}>
                                                 <div className={styles.memberInfo}>
@@ -577,14 +588,15 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                                                             {getInitials(member.full_name)}
                                                         </div>
                                                     )}
-                                                    <span className={styles.memberName}>
-                                                        {member.full_name}
-                                                        {member.id === currentUser.id && ' (You)'}
+                                                    <span className={styles.balanceText}>
+                                                        {balanceText}
+                                                        {balance !== 0 && (
+                                                            <strong className={balance < 0 ? styles.balanceOwes : styles.balanceOwed}>
+                                                                {formatCurrency(Math.abs(balance))}
+                                                            </strong>
+                                                        )}
                                                     </span>
                                                 </div>
-                                                <span className={`balance ${getBalanceClass(balance)}`}>
-                                                    {balance >= 0 ? '+' : ''}{formatCurrency(balance)}
-                                                </span>
                                             </li>
                                         );
                                     })}
