@@ -87,3 +87,20 @@ export interface GroupBalance {
     group_id: string;
     balances: Balance[];
 }
+
+export interface Settlement {
+    id: string;
+    group_id: string;
+    payer_id: string;
+    payee_id: string;
+    amount: number;
+    currency: string;
+    notes: string | null;
+    created_at: string;
+}
+
+export interface MinimumTransaction {
+    from: string;
+    to: string;
+    amount: number;
+}

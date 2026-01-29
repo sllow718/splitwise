@@ -243,6 +243,58 @@ CREATE POLICY "Users can update their own split status" ON expense_splits
 -- USING (bucket_id = 'expense-attachments');
 
 -- ============================================
+-- SETTLEMENTS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS settlements (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  payer_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  payee_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  currency TEXT DEFAULT 'USD',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable Row Level Security
+ALTER TABLE settlements ENABLE ROW LEVEL SECURITY;
+
+-- Policies for settlements
+CREATE POLICY "Users can view settlements in their groups" ON settlements
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM group_members
+      WHERE group_members.group_id = settlements.group_id
+      AND group_members.profile_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Group members can create settlements" ON settlements
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM group_members
+      WHERE group_members.group_id = group_id
+      AND group_members.profile_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Settlement creators can update their settlements" ON settlements
+  FOR UPDATE USING (
+    payer_id = auth.uid()
+    OR payee_id = auth.uid()
+  );
+
+CREATE POLICY "Settlement creators can delete their settlements" ON settlements
+  FOR DELETE USING (
+    payer_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM groups
+      WHERE groups.id = group_id
+      AND groups.created_by = auth.uid()
+    )
+  );
+
+-- ============================================
 -- INDEXES FOR PERFORMANCE
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_group_members_profile_id ON group_members(profile_id);
@@ -251,3 +303,6 @@ CREATE INDEX IF NOT EXISTS idx_expenses_group_id ON expenses(group_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_payer_id ON expenses(payer_id);
 CREATE INDEX IF NOT EXISTS idx_expense_splits_expense_id ON expense_splits(expense_id);
 CREATE INDEX IF NOT EXISTS idx_expense_splits_user_id ON expense_splits(user_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_group_id ON settlements(group_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_payer_id ON settlements(payer_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_payee_id ON settlements(payee_id);
