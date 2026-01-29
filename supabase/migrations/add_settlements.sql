@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS settlements (
   amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
   currency TEXT DEFAULT 'USD',
   notes TEXT,
+  settlement_date DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

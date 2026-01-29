@@ -246,6 +246,107 @@
     cursor: help;
 }
 
+.tabContainer {
+    display: flex;
+    gap: var(--spacing-1);
+    margin-bottom: var(--spacing-5);
+    border-bottom: 2px solid var(--color-border-light);
+}
+
+.tab {
+    padding: var(--spacing-3) var(--spacing-4);
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.tab:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-primary);
+}
+
+.tabActive {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.tabCount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 var(--spacing-1);
+    background: var(--color-bg-primary);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.tabActive .tabCount {
+    background: var(--color-primary);
+    color: white;
+}
+
+.settlementList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.settlementItem {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-4);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settlementIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-radius: var(--radius-md);
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.settlementInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.settlementDescription {
+    font-size: var(--font-size-base);
+    margin-bottom: var(--spacing-1);
+}
+
+.settlementMeta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.settlementAmount {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-success);
+}
+
 @media (max-width: 900px) {
     .content {
         grid-template-columns: 1fr;

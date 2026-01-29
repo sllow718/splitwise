@@ -85,10 +85,11 @@ function calculateExactSplit(
 }
 
 /**
- * Calculate net balances for a group based on expenses
+ * Calculate net balances for a group based on expenses and settlements
  */
 export function calculateGroupBalances(
-    expenses: { payer_id: string; splits: { user_id: string; amount: number }[] }[]
+    expenses: { payer_id: string; splits: { user_id: string; amount: number }[] }[],
+    settlements?: { payer_id: string; payee_id: string; amount: number }[]
 ): Map<string, number> {
     const balances = new Map<string, number>();
 
@@ -102,6 +103,19 @@ export function calculateGroupBalances(
         for (const split of expense.splits) {
             const currentBalance = balances.get(split.user_id) || 0;
             balances.set(split.user_id, currentBalance - split.amount);
+        }
+    }
+
+    // Apply settlements to balances
+    if (settlements) {
+        for (const settlement of settlements) {
+            // Payer paid money, so their balance decreases (they owe less)
+            const payerBalance = balances.get(settlement.payer_id) || 0;
+            balances.set(settlement.payer_id, payerBalance - settlement.amount);
+
+            // Payee received money, so their balance decreases (they are owed less)
+            const payeeBalance = balances.get(settlement.payee_id) || 0;
+            balances.set(settlement.payee_id, payeeBalance + settlement.amount);
         }
     }
 

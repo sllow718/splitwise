@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { KeyboardEvent, ChangeEvent, FormEvent } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { ExpenseSplit, ExpenseWithSplits, Group, Expense, Profile, MinimumTransaction } from '@/lib/types';
+import type { ExpenseSplit, ExpenseWithSplits, Group, Expense, Profile, MinimumTransaction, SettlementWithProfiles } from '@/lib/types';
 import { formatCurrency, calculateGroupBalances, calculateMinimumTransactions } from '@/lib/utils';
 import { getCategoryIcon, getCategoryColor } from '@/lib/expenseCategory';
 import ExpenseDetailModal from './ExpenseDetailModal';
@@ -35,6 +35,7 @@ interface ExpenseDetailData {
 
 export default function GroupDetail({ group, currentUser, onBack }: GroupDetailProps) {
     const [expenses, setExpenses] = useState<ExpenseWithPayer[]>([]);
+    const [settlements, setSettlements] = useState<SettlementWithProfiles[]>([]);
     const [members, setMembers] = useState<Profile[]>([]);
     const [showAddExpense, setShowAddExpense] = useState(false);
     const [showAddMember, setShowAddMember] = useState(false);
@@ -42,6 +43,7 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
     const [loading, setLoading] = useState(true);
     const [balances, setBalances] = useState<Map<string, number>>(new Map());
     const [suggestedTransactions, setSuggestedTransactions] = useState<MinimumTransaction[]>([]);
+    const [activeTab, setActiveTab] = useState<'expenses' | 'settlements'>('expenses');
     const [expenseDetailData, setExpenseDetailData] = useState<ExpenseDetailData | null>(null);
     const [isExpenseDetailOpen, setIsExpenseDetailOpen] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
@@ -82,6 +84,26 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
         }
     }, [group.id]);
 
+    const fetchSettlements = useCallback(async () => {
+        const { data } = await supabase
+            .from('settlements')
+            .select(`
+        *,
+        payer:profiles!payer_id (*),
+        payee:profiles!payee_id (*)
+      `)
+            .eq('group_id', group.id)
+            .order('settlement_date', { ascending: false });
+
+        if (data) {
+            setSettlements(data.map(settlement => ({
+                ...settlement,
+                payer: Array.isArray(settlement.payer) ? settlement.payer[0] : settlement.payer,
+                payee: Array.isArray(settlement.payee) ? settlement.payee[0] : settlement.payee
+            })));
+        }
+    }, [group.id]);
+
     const fetchExpenses = useCallback(async () => {
         const { data } = await supabase
             .from('expenses')
@@ -98,13 +120,18 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                 payer: Array.isArray(expense.payer) ? expense.payer[0] : expense.payer
             })));
 
-            // Fetch splits and calculate balances
+            // Fetch splits and settlements to calculate balances
             const expenseIds = data.map(e => e.id);
             if (expenseIds.length > 0) {
                 const { data: splits } = await supabase
                     .from('expense_splits')
                     .select('*')
                     .in('expense_id', expenseIds);
+
+                const { data: settlementsData } = await supabase
+                    .from('settlements')
+                    .select('payer_id, payee_id, amount')
+                    .eq('group_id', group.id);
 
                 if (splits) {
                     const expensesWithSplits = data.map(expense => ({
@@ -113,10 +140,26 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                             .filter(s => s.expense_id === expense.id)
                             .map(s => ({ user_id: s.user_id, amount: s.amount })),
                     }));
-                    const calculatedBalances = calculateGroupBalances(expensesWithSplits);
+                    const calculatedBalances = calculateGroupBalances(
+                        expensesWithSplits,
+                        settlementsData || []
+                    );
                     setBalances(calculatedBalances);
                     setSuggestedTransactions(calculateMinimumTransactions(calculatedBalances));
                 }
+            } else {
+                // Even with no expenses, fetch settlements to calculate balances
+                const { data: settlementsData } = await supabase
+                    .from('settlements')
+                    .select('payer_id, payee_id, amount')
+                    .eq('group_id', group.id);
+
+                const calculatedBalances = calculateGroupBalances(
+                    [],
+                    settlementsData || []
+                );
+                setBalances(calculatedBalances);
+                setSuggestedTransactions(calculateMinimumTransactions(calculatedBalances));
             }
         }
         setLoading(false);
@@ -132,7 +175,8 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
         loadedGroupRef.current = group.id;
         fetchMembers();
         fetchExpenses();
-    }, [fetchMembers, fetchExpenses, group.id]);
+        fetchSettlements();
+    }, [fetchMembers, fetchExpenses, fetchSettlements, group.id]);
 
     const handleExpenseAdded = (newExpense: Expense) => {
         fetchExpenses(); // Refresh to get full expense with payer info
@@ -558,75 +602,148 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                 </aside>
 
                 <main className={styles.main}>
-                    <div className={styles.expenseHeader}>
-                        <h2 className={styles.sectionTitle}>Expenses</h2>
-                        <span className={styles.expenseCount}>{expenses.length} total</span>
+                    <div className={styles.tabContainer}>
+                        <button
+                            className={`${styles.tab} ${activeTab === 'expenses' ? styles.tabActive : ''}`}
+                            onClick={() => setActiveTab('expenses')}
+                        >
+                            Expenses
+                            <span className={styles.tabCount}>{expenses.length}</span>
+                        </button>
+                        <button
+                            className={`${styles.tab} ${activeTab === 'settlements' ? styles.tabActive : ''}`}
+                            onClick={() => setActiveTab('settlements')}
+                        >
+                            Settlements
+                            <span className={styles.tabCount}>{settlements.length}</span>
+                        </button>
                     </div>
 
-                    {loading ? (
-                        <div className={styles.loadingState}>
-                            <div className="spinner"></div>
-                            <p>Loading expenses...</p>
-                        </div>
-                    ) : expenses.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="empty-state-icon">💸</div>
-                            <h3 className="empty-state-title">No expenses yet</h3>
-                            <p className="empty-state-text">
-                                Add your first expense to start tracking.
-                            </p>
-                            <button
-                                onClick={() => setShowAddExpense(true)}
-                                className="btn btn-primary"
-                            >
-                                Add First Expense
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="expense-list">
-                            {expenses.map((expense) => (
-                                <div
-                                    key={expense.id}
-                                    className="expense-item"
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => void openExpenseDetail(expense)}
-                                    onKeyDown={(event) => handleExpenseKeyDown(event, expense)}
-                                >
-                                    <div
-                                        className="expense-icon"
-                                        style={{ background: getCategoryColor(expense.category) }}
-                                    >
-                                        {getCategoryIcon(expense.category)}
-                                    </div>
-                                    <div className="expense-info">
-                                        <div className="expense-description">
-                                            {expense.description}
-                                            {expense.attachment_url && (
-                                                <span className={styles.attachmentBadge} title="Has attachment">
-                                                    📎
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="expense-meta">
-                                            Added by {expense.payer?.full_name || 'Unknown'} •{' '}
-                                            {new Date(expense.created_at).toLocaleDateString('en-US', {
-                                                month: 'short',
-                                                day: 'numeric',
-                                            })}
-                                        </div>
-                                    </div>
-                                    <div className="expense-amount">
-                                        <div className="expense-amount-value">
-                                            {formatCurrency(expense.amount, expense.currency)}
-                                        </div>
-                                        <span className={`badge badge-${expense.category === 'food' ? 'warning' : 'primary'}`}>
-                                            {expense.category}
-                                        </span>
-                                    </div>
+                    {activeTab === 'expenses' ? (
+                        <>
+                            {loading ? (
+                                <div className={styles.loadingState}>
+                                    <div className="spinner"></div>
+                                    <p>Loading expenses...</p>
                                 </div>
-                            ))}
-                        </div>
+                            ) : expenses.length === 0 ? (
+                                <div className="empty-state">
+                                    <div className="empty-state-icon">💸</div>
+                                    <h3 className="empty-state-title">No expenses yet</h3>
+                                    <p className="empty-state-text">
+                                        Add your first expense to start tracking.
+                                    </p>
+                                    <button
+                                        onClick={() => setShowAddExpense(true)}
+                                        className="btn btn-primary"
+                                    >
+                                        Add First Expense
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="expense-list">
+                                    {expenses.map((expense) => (
+                                        <div
+                                            key={expense.id}
+                                            className="expense-item"
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => void openExpenseDetail(expense)}
+                                            onKeyDown={(event) => handleExpenseKeyDown(event, expense)}
+                                        >
+                                            <div
+                                                className="expense-icon"
+                                                style={{ background: getCategoryColor(expense.category) }}
+                                            >
+                                                {getCategoryIcon(expense.category)}
+                                            </div>
+                                            <div className="expense-info">
+                                                <div className="expense-description">
+                                                    {expense.description}
+                                                    {expense.attachment_url && (
+                                                        <span className={styles.attachmentBadge} title="Has attachment">
+                                                            📎
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="expense-meta">
+                                                    Added by {expense.payer?.full_name || 'Unknown'} •{' '}
+                                                    {new Date(expense.created_at).toLocaleDateString('en-US', {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div className="expense-amount">
+                                                <div className="expense-amount-value">
+                                                    {formatCurrency(expense.amount, expense.currency)}
+                                                </div>
+                                                <span className={`badge badge-${expense.category === 'food' ? 'warning' : 'primary'}`}>
+                                                    {expense.category}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            {loading ? (
+                                <div className={styles.loadingState}>
+                                    <div className="spinner"></div>
+                                    <p>Loading settlements...</p>
+                                </div>
+                            ) : settlements.length === 0 ? (
+                                <div className="empty-state">
+                                    <div className="empty-state-icon">💰</div>
+                                    <h3 className="empty-state-title">No settlements yet</h3>
+                                    <p className="empty-state-text">
+                                        Record payments to settle up group balances.
+                                    </p>
+                                    <button
+                                        onClick={() => setShowSettleUp(true)}
+                                        className="btn btn-primary"
+                                    >
+                                        Record Settlement
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className={styles.settlementList}>
+                                    {settlements.map((settlement) => (
+                                        <div key={settlement.id} className={styles.settlementItem}>
+                                            <div className={styles.settlementIcon}>💵</div>
+                                            <div className={styles.settlementInfo}>
+                                                <div className={styles.settlementDescription}>
+                                                    <strong>{settlement.payer?.full_name || 'Unknown'}</strong>
+                                                    {' paid '}
+                                                    <strong>{settlement.payee?.full_name || 'Unknown'}</strong>
+                                                </div>
+                                                <div className={styles.settlementMeta}>
+                                                    {settlement.settlement_date ? (
+                                                        new Date(settlement.settlement_date).toLocaleDateString('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            year: 'numeric',
+                                                        })
+                                                    ) : (
+                                                        new Date(settlement.created_at).toLocaleDateString('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            year: 'numeric',
+                                                        })
+                                                    )}
+                                                    {settlement.notes && ` • ${settlement.notes}`}
+                                                </div>
+                                            </div>
+                                            <div className={styles.settlementAmount}>
+                                                {formatCurrency(settlement.amount, settlement.currency)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </main>
             </div>
@@ -684,6 +801,7 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                     onSettled={() => {
                         setShowSettleUp(false);
                         fetchExpenses();
+                        fetchSettlements();
                     }}
                 />
             )}

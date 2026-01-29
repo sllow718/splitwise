@@ -27,6 +27,9 @@ export default function SettleUpModal({
     const [payeeId, setPayeeId] = useState('');
     const [amount, setAmount] = useState('');
     const [notes, setNotes] = useState('');
+    const [settlementDate, setSettlementDate] = useState(
+        new Date().toISOString().split('T')[0]
+    );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +68,7 @@ export default function SettleUpModal({
                 amount: numAmount,
                 currency: 'USD',
                 notes: notes.trim() || null,
+                settlement_date: settlementDate,
             });
 
             if (insertError) {
@@ -190,6 +194,19 @@ export default function SettleUpModal({
                                 placeholder="0.00"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="settlement-date" className="form-label">
+                                Settlement Date *
+                            </label>
+                            <input
+                                id="settlement-date"
+                                type="date"
+                                className="form-input"
+                                value={settlementDate}
+                                onChange={(e) => setSettlementDate(e.target.value)}
                             />
                         </div>
 

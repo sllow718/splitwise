@@ -96,7 +96,13 @@ export interface Settlement {
     amount: number;
     currency: string;
     notes: string | null;
+    settlement_date?: string;
     created_at: string;
+}
+
+export interface SettlementWithProfiles extends Settlement {
+    payer?: Profile | null;
+    payee?: Profile | null;
 }
 
 export interface MinimumTransaction {
