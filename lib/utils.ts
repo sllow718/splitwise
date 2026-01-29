@@ -85,10 +85,11 @@ function calculateExactSplit(
 }
 
 /**
- * Calculate net balances for a group based on expenses
+ * Calculate net balances for a group based on expenses and settlements
  */
 export function calculateGroupBalances(
-    expenses: { payer_id: string; splits: { user_id: string; amount: number }[] }[]
+    expenses: { payer_id: string; splits: { user_id: string; amount: number }[] }[],
+    settlements?: { payer_id: string; payee_id: string; amount: number }[]
 ): Map<string, number> {
     const balances = new Map<string, number>();
 
@@ -105,6 +106,19 @@ export function calculateGroupBalances(
         }
     }
 
+    // Apply settlements to balances
+    if (settlements) {
+        for (const settlement of settlements) {
+            // Payer paid money, so their balance decreases (they owe less)
+            const payerBalance = balances.get(settlement.payer_id) || 0;
+            balances.set(settlement.payer_id, payerBalance + settlement.amount);
+
+            // Payee received money, so their balance decreases (they are owed less)
+            const payeeBalance = balances.get(settlement.payee_id) || 0;
+            balances.set(settlement.payee_id, payeeBalance - settlement.amount);
+        }
+    }
+
     return balances;
 }
 
@@ -116,4 +130,51 @@ export function formatCurrency(amount: number, currency: string = 'USD'): string
         style: 'currency',
         currency,
     }).format(amount);
+}
+
+/**
+ * Calculate minimum transactions needed to settle all debts
+ */
+export function calculateMinimumTransactions(
+    balances: Map<string, number>
+): { from: string; to: string; amount: number }[] {
+    const creditors: { userId: string; amount: number }[] = [];
+    const debtors: { userId: string; amount: number }[] = [];
+
+    balances.forEach((balance, userId) => {
+        if (balance > 0.01) {
+            creditors.push({ userId, amount: balance });
+        } else if (balance < -0.01) {
+            debtors.push({ userId, amount: -balance });
+        }
+    });
+
+    creditors.sort((a, b) => b.amount - a.amount);
+    debtors.sort((a, b) => b.amount - a.amount);
+
+    const transactions: { from: string; to: string; amount: number }[] = [];
+    let i = 0;
+    let j = 0;
+
+    while (i < creditors.length && j < debtors.length) {
+        const creditor = creditors[i];
+        const debtor = debtors[j];
+        const amount = Math.min(creditor.amount, debtor.amount);
+
+        if (amount > 0.01) {
+            transactions.push({
+                from: debtor.userId,
+                to: creditor.userId,
+                amount: Math.round(amount * 100) / 100,
+            });
+        }
+
+        creditor.amount -= amount;
+        debtor.amount -= amount;
+
+        if (creditor.amount < 0.01) i++;
+        if (debtor.amount < 0.01) j++;
+    }
+
+    return transactions;
 }
