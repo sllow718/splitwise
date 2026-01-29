@@ -111,11 +111,11 @@ export function calculateGroupBalances(
         for (const settlement of settlements) {
             // Payer paid money, so their balance decreases (they owe less)
             const payerBalance = balances.get(settlement.payer_id) || 0;
-            balances.set(settlement.payer_id, payerBalance - settlement.amount);
+            balances.set(settlement.payer_id, payerBalance + settlement.amount);
 
             // Payee received money, so their balance decreases (they are owed less)
             const payeeBalance = balances.get(settlement.payee_id) || 0;
-            balances.set(settlement.payee_id, payeeBalance + settlement.amount);
+            balances.set(settlement.payee_id, payeeBalance - settlement.amount);
         }
     }
 
