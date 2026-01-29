@@ -117,3 +117,50 @@ export function formatCurrency(amount: number, currency: string = 'USD'): string
         currency,
     }).format(amount);
 }
+
+/**
+ * Calculate minimum transactions needed to settle all debts
+ */
+export function calculateMinimumTransactions(
+    balances: Map<string, number>
+): { from: string; to: string; amount: number }[] {
+    const creditors: { userId: string; amount: number }[] = [];
+    const debtors: { userId: string; amount: number }[] = [];
+
+    balances.forEach((balance, userId) => {
+        if (balance > 0.01) {
+            creditors.push({ userId, amount: balance });
+        } else if (balance < -0.01) {
+            debtors.push({ userId, amount: -balance });
+        }
+    });
+
+    creditors.sort((a, b) => b.amount - a.amount);
+    debtors.sort((a, b) => b.amount - a.amount);
+
+    const transactions: { from: string; to: string; amount: number }[] = [];
+    let i = 0;
+    let j = 0;
+
+    while (i < creditors.length && j < debtors.length) {
+        const creditor = creditors[i];
+        const debtor = debtors[j];
+        const amount = Math.min(creditor.amount, debtor.amount);
+
+        if (amount > 0.01) {
+            transactions.push({
+                from: debtor.userId,
+                to: creditor.userId,
+                amount: Math.round(amount * 100) / 100,
+            });
+        }
+
+        creditor.amount -= amount;
+        debtor.amount -= amount;
+
+        if (creditor.amount < 0.01) i++;
+        if (debtor.amount < 0.01) j++;
+    }
+
+    return transactions;
+}

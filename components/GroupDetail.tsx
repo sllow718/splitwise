@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { KeyboardEvent, ChangeEvent, FormEvent } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { ExpenseSplit, ExpenseWithSplits, Group, Expense, Profile } from '@/lib/types';
-import { formatCurrency, calculateGroupBalances } from '@/lib/utils';
+import type { ExpenseSplit, ExpenseWithSplits, Group, Expense, Profile, MinimumTransaction } from '@/lib/types';
+import { formatCurrency, calculateGroupBalances, calculateMinimumTransactions } from '@/lib/utils';
 import { getCategoryIcon, getCategoryColor } from '@/lib/expenseCategory';
 import ExpenseDetailModal from './ExpenseDetailModal';
 import ExpenseModal from './ExpenseModal';
 import AddExpenseModal from './AddExpenseModal';
 import AddMemberModal from './AddMemberModal';
+import SettleUpModal from './SettleUpModal';
 import styles from './GroupDetail.module.css';
 
 interface GroupDetailProps {
@@ -37,8 +38,10 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
     const [members, setMembers] = useState<Profile[]>([]);
     const [showAddExpense, setShowAddExpense] = useState(false);
     const [showAddMember, setShowAddMember] = useState(false);
+    const [showSettleUp, setShowSettleUp] = useState(false);
     const [loading, setLoading] = useState(true);
     const [balances, setBalances] = useState<Map<string, number>>(new Map());
+    const [suggestedTransactions, setSuggestedTransactions] = useState<MinimumTransaction[]>([]);
     const [expenseDetailData, setExpenseDetailData] = useState<ExpenseDetailData | null>(null);
     const [isExpenseDetailOpen, setIsExpenseDetailOpen] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
@@ -110,7 +113,9 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                             .filter(s => s.expense_id === expense.id)
                             .map(s => ({ user_id: s.user_id, amount: s.amount })),
                     }));
-                    setBalances(calculateGroupBalances(expensesWithSplits));
+                    const calculatedBalances = calculateGroupBalances(expensesWithSplits);
+                    setBalances(calculatedBalances);
+                    setSuggestedTransactions(calculateMinimumTransactions(calculatedBalances));
                 }
             }
         }
@@ -510,35 +515,44 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                         {members.length === 0 ? (
                             <p className={styles.emptyText}>No members yet</p>
                         ) : (
-                            <ul className={styles.balanceList}>
-                                {members.map((member) => {
-                                    const balance = getUserBalance(member.id);
-                                    return (
-                                        <li key={member.id} className={styles.balanceItem}>
-                                            <div className={styles.memberInfo}>
-                                                {member.avatar_url ? (
-                                                    <img
-                                                        src={member.avatar_url}
-                                                        alt={member.full_name}
-                                                        className={styles.memberAvatar}
-                                                    />
-                                                ) : (
-                                                    <div className={`avatar avatar-sm ${styles.memberAvatar}`}>
-                                                        {getInitials(member.full_name)}
-                                                    </div>
-                                                )}
-                                                <span className={styles.memberName}>
-                                                    {member.full_name}
-                                                    {member.id === currentUser.id && ' (You)'}
+                            <>
+                                <ul className={styles.balanceList}>
+                                    {members.map((member) => {
+                                        const balance = getUserBalance(member.id);
+                                        return (
+                                            <li key={member.id} className={styles.balanceItem}>
+                                                <div className={styles.memberInfo}>
+                                                    {member.avatar_url ? (
+                                                        <img
+                                                            src={member.avatar_url}
+                                                            alt={member.full_name}
+                                                            className={styles.memberAvatar}
+                                                        />
+                                                    ) : (
+                                                        <div className={`avatar avatar-sm ${styles.memberAvatar}`}>
+                                                            {getInitials(member.full_name)}
+                                                        </div>
+                                                    )}
+                                                    <span className={styles.memberName}>
+                                                        {member.full_name}
+                                                        {member.id === currentUser.id && ' (You)'}
+                                                    </span>
+                                                </div>
+                                                <span className={`balance ${getBalanceClass(balance)}`}>
+                                                    {balance >= 0 ? '+' : ''}{formatCurrency(balance)}
                                                 </span>
-                                            </div>
-                                            <span className={`balance ${getBalanceClass(balance)}`}>
-                                                {balance >= 0 ? '+' : ''}{formatCurrency(balance)}
-                                            </span>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                                <button
+                                    onClick={() => setShowSettleUp(true)}
+                                    className="btn btn-primary"
+                                    style={{ width: '100%', marginTop: '16px' }}
+                                >
+                                    Settle Up
+                                </button>
+                            </>
                         )}
                     </div>
                 </aside>
@@ -657,6 +671,20 @@ export default function GroupDetail({ group, currentUser, onBack }: GroupDetailP
                     onDelete={handleExpenseDelete}
                     loading={detailLoading}
                     isDeleting={deletingExpenseId === expenseDetailData.expense.id}
+                />
+            )}
+
+            {showSettleUp && (
+                <SettleUpModal
+                    groupId={group.id}
+                    currentUserId={currentUser.id}
+                    members={members}
+                    suggestedTransactions={suggestedTransactions}
+                    onClose={() => setShowSettleUp(false)}
+                    onSettled={() => {
+                        setShowSettleUp(false);
+                        fetchExpenses();
+                    }}
                 />
             )}
         </div>
